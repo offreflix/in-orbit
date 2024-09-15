@@ -1,22 +1,43 @@
 import fastify from 'fastify'
 import { createGoal } from '../services/create-goal'
 import z from 'zod'
+import {
+  serializerCompiler,
+  validatorCompiler,
+  type ZodTypeProvider,
+} from 'fastify-type-provider-zod'
+import { getWeekPendingGoals } from '../services/get-week-pending-goals'
 
-const app = fastify()
+const app = fastify().withTypeProvider<ZodTypeProvider>()
 
-app.post('/goals', async (request) => {
-  const createGoalSchema = z.object({
-    title: z.string(),
-    desiredWeeklyFrequency: z.number(),
-  })
+app.setValidatorCompiler(validatorCompiler)
+app.setSerializerCompiler(serializerCompiler)
 
-  const body = createGoalSchema.parse(request.body)
+app.get('/pending-goals', async () => {
+  const { pendingGoals } = await getWeekPendingGoals()
 
-  await createGoal({
-    title: body.title,
-    desiredWeeklyFrequency: body.desiredWeeklyFrequency,
-  })
+  return { pendingGoals }
 })
+
+app.post(
+  '/goals',
+
+  {
+    schema: {
+      body: z.object({
+        title: z.string(),
+        desiredWeeklyFrequency: z.number().int().min(1).max(7),
+      }),
+    },
+  },
+  async (request) => {
+    const { title, desiredWeeklyFrequency } = request.body
+    await createGoal({
+      title,
+      desiredWeeklyFrequency,
+    })
+  }
+)
 
 app.listen({ port: 3333 }).then(() => {
   console.log('Server listening on port 3333')
